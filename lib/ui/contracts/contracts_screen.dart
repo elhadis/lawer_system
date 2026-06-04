@@ -6,6 +6,7 @@ import '../../services/pdf_service.dart';
 import '../../theme/app_theme.dart';
 import '../common/empty_state.dart';
 import '../common/money.dart';
+import 'certification_workspace_screen.dart';
 import 'contract_builder_screen.dart';
 
 class ContractsScreen extends StatefulWidget {
@@ -32,30 +33,51 @@ class _ContractsScreenState extends State<ContractsScreen> {
   }
 
   Future<void> _new() async {
-    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
-      builder: (_) => const ContractBuilderScreen(),
-    ));
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const ContractBuilderScreen()),
+    );
+    if (saved == true) _reload();
+  }
+
+  Future<void> _newCertification() async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const CertificationWorkspaceScreen()),
+    );
     if (saved == true) _reload();
   }
 
   Future<void> _edit(Contract c) async {
-    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
-      builder: (_) => ContractBuilderScreen(initial: c),
-    ));
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => c.isCertification
+            ? CertificationWorkspaceScreen(initial: c)
+            : ContractBuilderScreen(initial: c),
+      ),
+    );
     if (saved == true) _reload();
   }
 
   Future<void> _print(Contract c) async {
-    final settings = await _db.getSettings();
-    final client = c.clientId == null ? null : await _db.getClient(c.clientId!);
-    final legalCase =
-        c.caseId == null ? null : await _db.getCase(c.caseId!);
-    final bytes = await PdfService.instance.buildContractPdf(
-      settings: settings,
-      contract: c,
-      client: client,
-      legalCase: legalCase,
-    );
+    final bytes = c.isCertification
+        ? await PdfService.instance.buildCertificationPdf(
+            title: c.title,
+            body: c.body,
+          )
+        : await () async {
+            final settings = await _db.getSettings();
+            final client = c.clientId == null
+                ? null
+                : await _db.getClient(c.clientId!);
+            final legalCase = c.caseId == null
+                ? null
+                : await _db.getCase(c.caseId!);
+            return PdfService.instance.buildContractPdf(
+              settings: settings,
+              contract: c,
+              client: client,
+              legalCase: legalCase,
+            );
+          }();
     await PdfService.instance.exportPdf(
       bytes,
       fileName: '${c.title}.pdf',
@@ -68,10 +90,24 @@ class _ContractsScreenState extends State<ContractsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _new,
-        icon: const Icon(Icons.note_add_rounded),
-        label: const Text('عقد جديد'),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'newContract',
+            onPressed: _new,
+            icon: const Icon(Icons.note_add_rounded),
+            label: const Text('عقد جديد'),
+          ),
+          const SizedBox(height: 10),
+          FloatingActionButton.extended(
+            heroTag: 'newCertification',
+            onPressed: _newCertification,
+            icon: const Icon(Icons.verified_rounded),
+            label: const Text('توثيق جديد'),
+          ),
+        ],
       ),
       body: FutureBuilder<List<Contract>>(
         future: _future,
@@ -85,18 +121,29 @@ class _ContractsScreenState extends State<ContractsScreen> {
               icon: Icons.description_rounded,
               title: 'لا توجد عقود محفوظة',
               message:
-                  'استخدم منشئ العقود لصياغة وحفظ وطباعة العقود القانونية بشعار المكتب.',
-              action: ElevatedButton.icon(
-                onPressed: _new,
-                icon: const Icon(Icons.note_add_rounded),
-                label: const Text('عقد جديد'),
+                  'استخدم منشئ العقود أو التوثيقات لصياغة وحفظ وطباعة المستندات القانونية.',
+              action: Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _new,
+                    icon: const Icon(Icons.note_add_rounded),
+                    label: const Text('عقد جديد'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _newCertification,
+                    icon: const Icon(Icons.verified_rounded),
+                    label: const Text('توثيق جديد'),
+                  ),
+                ],
               ),
             );
           }
           return ListView.separated(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
             itemCount: list.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 6),
+            separatorBuilder: (context, index) => const SizedBox(height: 6),
             itemBuilder: (_, i) {
               final c = list[i];
               return Card(
@@ -111,27 +158,41 @@ class _ContractsScreenState extends State<ContractsScreen> {
                       color: AppColors.navy.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.description_rounded,
-                        color: AppColors.navy),
+                    child: Icon(
+                      c.isCertification
+                          ? Icons.verified_rounded
+                          : Icons.description_rounded,
+                      color: AppColors.navy,
+                    ),
                   ),
-                  title: Text(c.title,
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text([
-                    formatDate(c.contractDate),
-                    if (c.amount > 0) '${formatMoney(c.amount)} ر.س',
-                  ].join(' • ')),
+                  title: Text(
+                    c.title,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(
+                    [
+                      c.isCertification ? 'توثيق' : 'عقد',
+                      formatDate(c.contractDate),
+                      if (!c.isCertification && c.amount > 0)
+                        '${formatMoney(c.amount)} ر.س',
+                    ].join(' • '),
+                  ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.print_rounded,
-                            color: AppColors.navy),
+                        icon: const Icon(
+                          Icons.print_rounded,
+                          color: AppColors.navy,
+                        ),
                         tooltip: 'طباعة',
                         onPressed: () => _print(c),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.delete_outline,
-                            color: AppColors.danger),
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: AppColors.danger,
+                        ),
                         onPressed: () async {
                           await _db.deleteContract(c.id!);
                           _reload();

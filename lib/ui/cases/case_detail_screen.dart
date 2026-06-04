@@ -58,9 +58,9 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
   }
 
   Future<void> _editCase(LegalCase c) async {
-    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
-      builder: (_) => CaseFormScreen(initial: c),
-    ));
+    final saved = await Navigator.of(
+      context,
+    ).push<bool>(MaterialPageRoute(builder: (_) => CaseFormScreen(initial: c)));
     if (saved == true) _reload();
   }
 
@@ -83,24 +83,24 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     if (!mounted) return;
     await showDialog(
       context: context,
-      builder: (_) => _SessionDialog(
-        legalCase: c,
-        existing: s,
-        onSaved: _reload,
-      ),
+      builder: (_) =>
+          _SessionDialog(legalCase: c, existing: s, onSaved: _reload),
     );
   }
 
   Future<void> _attachDocument() async {
-    final picked =
-        await FileService.instance.pickAndStoreDocument(subfolder: 'cases');
+    final picked = await FileService.instance.pickAndStoreDocument(
+      subfolder: 'cases',
+    );
     if (picked == null) return;
-    await _db.insertAttachment(Attachment(
-      caseId: widget.caseId,
-      fileName: picked.fileName,
-      localPath: picked.localPath,
-      sizeBytes: picked.sizeBytes,
-    ));
+    await _db.insertAttachment(
+      Attachment(
+        caseId: widget.caseId,
+        fileName: picked.fileName,
+        localPath: picked.localPath,
+        sizeBytes: picked.sizeBytes,
+      ),
+    );
     _reload();
   }
 
@@ -148,8 +148,10 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
               if (b.sessions.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(16),
-                  child: Text('لا توجد جلسات.',
-                      style: TextStyle(color: Colors.black54)),
+                  child: Text(
+                    'لا توجد جلسات.',
+                    style: TextStyle(color: Colors.black54),
+                  ),
                 )
               else
                 ...b.sessions.map(_sessionTile),
@@ -167,8 +169,10 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
               if (b.payments.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(16),
-                  child: Text('لم يتم تسجيل أي دفعات.',
-                      style: TextStyle(color: Colors.black54)),
+                  child: Text(
+                    'لم يتم تسجيل أي دفعات.',
+                    style: TextStyle(color: Colors.black54),
+                  ),
                 )
               else
                 ...b.payments.map((p) => _paymentTile(p, c)),
@@ -186,8 +190,10 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
               if (b.attachments.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(16),
-                  child: Text('لا توجد مستندات.',
-                      style: TextStyle(color: Colors.black54)),
+                  child: Text(
+                    'لا توجد مستندات.',
+                    style: TextStyle(color: Colors.black54),
+                  ),
                 )
               else
                 ...b.attachments.map(_attachmentTile),
@@ -228,8 +234,10 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
               ),
               IconButton(
                 onPressed: () => _editCase(c),
-                icon: const Icon(Icons.edit_note_rounded,
-                    color: AppColors.gold),
+                icon: const Icon(
+                  Icons.edit_note_rounded,
+                  color: AppColors.gold,
+                ),
               ),
             ],
           ),
@@ -244,22 +252,25 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                   Icons.person_outline,
                   b.client!.fullName,
                   onTap: () async {
-                    await Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) =>
-                          ClientDetailScreen(client: b.client!),
-                    ));
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ClientDetailScreen(client: b.client!),
+                      ),
+                    );
                     _reload();
                   },
                 ),
               if ((c.courtName ?? '').isNotEmpty)
                 _kv(Icons.account_balance, c.courtName!),
-              if ((c.caseType ?? '').isNotEmpty)
-                _kv(Icons.category_outlined, c.caseType!),
+              if (c.caseType != null)
+                _kv(Icons.category_outlined, c.caseType!.nameAr),
               if ((c.opponent ?? '').isNotEmpty)
                 _kv(Icons.swap_horiz, 'الخصم: ${c.opponent!}'),
               if ((c.nextSessionDate ?? '').isNotEmpty)
-                _kv(Icons.event,
-                    'الجلسة القادمة: ${formatDate(c.nextSessionDate!)}'),
+                _kv(
+                  Icons.event,
+                  'الجلسة القادمة: ${formatDate(c.nextSessionDate!)}',
+                ),
             ],
           ),
           const SizedBox(height: 14),
@@ -267,12 +278,13 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
             children: [
               Expanded(
                 child: _miniMoney(
-                    'الأتعاب', c.fees, AppColors.gold.withValues(alpha: 0.95)),
+                  'الأتعاب',
+                  c.fees,
+                  AppColors.gold.withValues(alpha: 0.95),
+                ),
               ),
               const SizedBox(width: 8),
-              Expanded(
-                child: _miniMoney('المسدد', c.paid, AppColors.success),
-              ),
+              Expanded(child: _miniMoney('المسدد', c.paid, AppColors.success)),
               const SizedBox(width: 8),
               Expanded(
                 child: _miniMoney('المتبقي', c.outstanding, AppColors.danger),
@@ -301,8 +313,11 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
         ),
         if (onTap != null) ...[
           const SizedBox(width: 4),
-          const Icon(Icons.open_in_new_rounded,
-              color: AppColors.gold, size: 12),
+          const Icon(
+            Icons.open_in_new_rounded,
+            color: AppColors.gold,
+            size: 12,
+          ),
         ],
       ],
     );
@@ -327,8 +342,10 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
       ),
       child: Column(
         children: [
-          Text(label,
-              style: const TextStyle(color: Colors.white70, fontSize: 11)),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
+          ),
           const SizedBox(height: 4),
           Text(
             formatMoney(value),
@@ -411,12 +428,19 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Text(formatDate(p.paymentDate),
-                          style: const TextStyle(color: Colors.black54)),
+                      Text(
+                        formatDate(p.paymentDate),
+                        style: const TextStyle(color: Colors.black54),
+                      ),
                       if ((p.method ?? '').isNotEmpty) ...[
-                        const Text('  •  ', style: TextStyle(color: Colors.black38)),
-                        Text(p.method!,
-                            style: const TextStyle(color: Colors.black54)),
+                        const Text(
+                          '  •  ',
+                          style: TextStyle(color: Colors.black38),
+                        ),
+                        Text(
+                          p.method!,
+                          style: const TextStyle(color: Colors.black54),
+                        ),
                       ],
                     ],
                   ),
@@ -444,8 +468,10 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     return Card(
       child: ListTile(
         onTap: () => OpenFilex.open(a.localPath),
-        leading: const Icon(Icons.insert_drive_file_rounded,
-            color: AppColors.navy),
+        leading: const Icon(
+          Icons.insert_drive_file_rounded,
+          color: AppColors.navy,
+        ),
         title: Text(a.fileName),
         subtitle: Text(formatDateTime(a.createdAt)),
         trailing: IconButton(
@@ -501,46 +527,48 @@ class _PaymentDialogState extends State<_PaymentDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-            TextField(
-              controller: _amount,
-              decoration: const InputDecoration(labelText: 'المبلغ *'),
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _method,
-              decoration:
-                  const InputDecoration(labelText: 'طريقة الدفع (نقدي / تحويل ...)'),
-            ),
-            const SizedBox(height: 8),
-            BidiTextField(
-              controller: _notes,
-              label: 'ملاحظات الدفعة',
-              hint: 'رقم الإيصال أو تفاصيل إضافية',
-              minLines: 3,
-              maxLines: 6,
-            ),
-            const SizedBox(height: 8),
-            InkWell(
-              onTap: () async {
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: _date,
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime(2100),
-                );
-                if (picked != null) setState(() => _date = picked);
-              },
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'تاريخ الدفعة',
-                  suffixIcon: Icon(Icons.calendar_today),
+              TextField(
+                controller: _amount,
+                decoration: const InputDecoration(labelText: 'المبلغ *'),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
                 ),
-                child: Text(formatDate(_date.toIso8601String())),
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              TextField(
+                controller: _method,
+                decoration: const InputDecoration(
+                  labelText: 'طريقة الدفع (نقدي / تحويل ...)',
+                ),
+              ),
+              const SizedBox(height: 8),
+              BidiTextField(
+                controller: _notes,
+                label: 'ملاحظات الدفعة',
+                hint: 'رقم الإيصال أو تفاصيل إضافية',
+                minLines: 3,
+                maxLines: 6,
+              ),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _date,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null) setState(() => _date = picked);
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'تاريخ الدفعة',
+                    suffixIcon: Icon(Icons.calendar_today),
+                  ),
+                  child: Text(formatDate(_date.toIso8601String())),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -553,13 +581,17 @@ class _PaymentDialogState extends State<_PaymentDialog> {
           onPressed: () async {
             final v = double.tryParse(_amount.text.replaceAll(',', ''));
             if (v == null || v <= 0) return;
-            await DatabaseHelper.instance.insertPayment(Payment(
-              caseId: widget.legalCase.id!,
-              amount: v,
-              paymentDate: _date.toIso8601String(),
-              method: _method.text.trim().isEmpty ? null : _method.text.trim(),
-              notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
-            ));
+            await DatabaseHelper.instance.insertPayment(
+              Payment(
+                caseId: widget.legalCase.id!,
+                amount: v,
+                paymentDate: _date.toIso8601String(),
+                method: _method.text.trim().isEmpty
+                    ? null
+                    : _method.text.trim(),
+                notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+              ),
+            );
             widget.onSaved();
             if (mounted) Navigator.pop(context);
           },
@@ -635,16 +667,17 @@ class _SessionDialogState extends State<_SessionDialog> {
               DropdownButtonFormField<String>(
                 initialValue: _status,
                 decoration: const InputDecoration(labelText: 'الحالة'),
-                items: const [
-                  CaseSession.statusPending,
-                  CaseSession.statusHeld,
-                  CaseSession.statusAdjourned,
-                  CaseSession.statusCancelled,
-                ]
-                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                    .toList(),
-                onChanged: (v) => setState(
-                    () => _status = v ?? CaseSession.statusPending),
+                items:
+                    const [
+                          CaseSession.statusPending,
+                          CaseSession.statusHeld,
+                          CaseSession.statusAdjourned,
+                          CaseSession.statusCancelled,
+                        ]
+                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                        .toList(),
+                onChanged: (v) =>
+                    setState(() => _status = v ?? CaseSession.statusPending),
               ),
               const SizedBox(height: 8),
               BidiTextField(
@@ -667,8 +700,8 @@ class _SessionDialogState extends State<_SessionDialog> {
                 onTap: () async {
                   final picked = await showDatePicker(
                     context: context,
-                    initialDate: _nextDateValue ??
-                        _date.add(const Duration(days: 14)),
+                    initialDate:
+                        _nextDateValue ?? _date.add(const Duration(days: 14)),
                     firstDate: DateTime(2000),
                     lastDate: DateTime(2100),
                   );
@@ -685,9 +718,11 @@ class _SessionDialogState extends State<_SessionDialog> {
                     helperText: 'سيتم إنشاء جلسة جديدة قيد الانتظار تلقائيًا',
                     suffixIcon: Icon(Icons.event),
                   ),
-                  child: Text(_nextDateValue == null
-                      ? 'لم تُحدَّد'
-                      : formatDate(_nextDateValue!.toIso8601String())),
+                  child: Text(
+                    _nextDateValue == null
+                        ? 'لم تُحدَّد'
+                        : formatDate(_nextDateValue!.toIso8601String()),
+                  ),
                 ),
               ),
             ],

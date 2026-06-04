@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../db/database_helper.dart';
+import '../../models/legal_case.dart';
 import '../../theme/app_theme.dart';
 import '../app_shell.dart';
 import '../cases/case_detail_screen.dart';
@@ -19,6 +20,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final _db = DatabaseHelper.instance;
   late Future<_DashboardData> _future;
+  _DashboardCaseFilter _selectedCaseFilter = _DashboardCaseFilter.open;
 
   @override
   void initState() {
@@ -32,10 +34,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final agenda = await _db.getAgenda(
       from: DateTime.now().subtract(const Duration(days: 1)),
     );
+    final allCases = await _db.getCases();
+    final caseFinanceRows = await _db.getCasesWithClient();
     return _DashboardData(
       totals: totals,
       counters: counters,
       upcoming: agenda.take(6).toList(),
+      allCases: allCases,
+      caseFinanceRows: caseFinanceRows,
     );
   }
 
@@ -49,9 +55,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _go(int tab) => AppShell.goTo(context, tab);
 
   Future<void> _openCase(int caseId) async {
-    await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => CaseDetailScreen(caseId: caseId),
-    ));
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => CaseDetailScreen(caseId: caseId)));
     if (mounted) _refresh();
   }
 
@@ -71,8 +77,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               SectionHeader(
                 title: 'الملخّص المالي',
-                subtitle:
-                    'إجمالي الأتعاب والمسدد والمتبقي عبر جميع القضايا',
+                subtitle: 'إجمالي الأتعاب والمسدد والمتبقي عبر جميع القضايا',
                 actions: [
                   TextButton.icon(
                     onPressed: () => _go(AppShellTab.finance),
@@ -87,6 +92,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 subtitle: 'انقر على أي بطاقة للوصول إلى الوحدة المرتبطة',
               ),
               _countersRow(d),
+              SectionHeader(
+                title: 'إحصائيات تصنيفات القضايا',
+                subtitle: 'إجمالي القضايا مقابل القضايا المفتوحة لكل تصنيف',
+              ),
+              _caseCategoryStats(d),
+              SectionHeader(
+                title: _selectedCaseFilter.title,
+                subtitle:
+                    'انقر على صف القضية لعرض التفاصيل أو كشف حساب الموكّل',
+              ),
+              _filteredCaseFinanceSection(d),
               SectionHeader(
                 title: 'الجلسات القادمة',
                 subtitle: 'أقرب الجلسات في الأجندة',
@@ -168,7 +184,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         label: 'القضايا النشطة',
         value: '${d.counters['openCases'] ?? 0}',
         icon: Icons.gavel_rounded,
-        onTap: () => _go(AppShellTab.finance),
+        onTap: () {
+          setState(() {
+            _selectedCaseFilter = _DashboardCaseFilter.open;
+          });
+        },
         hint: 'متابعة القضايا غير المغلقة',
       ),
       _MiniTile(
@@ -188,12 +208,253 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ];
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: tiles,
+      child: Wrap(spacing: 12, runSpacing: 12, children: tiles),
+    );
+  }
+
+  Widget _caseCategoryStats(_DashboardData d) {
+    final civilTotal = d.allCases
+        .where((c) => c.caseType == CaseType.civil)
+        .length;
+    final civilActive = d.allCases
+        .where(
+          (c) =>
+              c.caseType == CaseType.civil && c.status == LegalCase.statusOpen,
+        )
+        .length;
+
+    final criminalTotal = d.allCases
+        .where((c) => c.caseType == CaseType.criminal)
+        .length;
+    final criminalActive = d.allCases
+        .where(
+          (c) =>
+              c.caseType == CaseType.criminal &&
+              c.status == LegalCase.statusOpen,
+        )
+        .length;
+
+    final familyTotal = d.allCases
+        .where((c) => c.caseType == CaseType.family)
+        .length;
+    final familyActive = d.allCases
+        .where(
+          (c) =>
+              c.caseType == CaseType.family && c.status == LegalCase.statusOpen,
+        )
+        .length;
+
+    final cards = [
+      _CaseCategoryCard(
+        title: CaseType.civil.nameAr,
+        accentColor: Colors.blue,
+        total: civilTotal,
+        active: civilActive,
+        onTap: () {
+          setState(() {
+            _selectedCaseFilter = _DashboardCaseFilter.civil;
+          });
+        },
+      ),
+      _CaseCategoryCard(
+        title: CaseType.criminal.nameAr,
+        accentColor: Colors.red,
+        total: criminalTotal,
+        active: criminalActive,
+        onTap: () {
+          setState(() {
+            _selectedCaseFilter = _DashboardCaseFilter.criminal;
+          });
+        },
+      ),
+      _CaseCategoryCard(
+        title: CaseType.family.nameAr,
+        accentColor: Colors.teal,
+        total: familyTotal,
+        active: familyActive,
+        onTap: () {
+          setState(() {
+            _selectedCaseFilter = _DashboardCaseFilter.family;
+          });
+        },
+      ),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final cardWidth = constraints.maxWidth >= 1024
+              ? (constraints.maxWidth - 24) / 3
+              : constraints.maxWidth >= 700
+              ? (constraints.maxWidth - 12) / 2
+              : constraints.maxWidth;
+
+          return Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: cards
+                .map((card) => SizedBox(width: cardWidth, child: card))
+                .toList(),
+          );
+        },
       ),
     );
+  }
+
+  Widget _filteredCaseFinanceSection(_DashboardData d) {
+    final rows = _selectedCaseFilter.filterRows(d.caseFinanceRows);
+
+    if (rows.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 30),
+        child: Center(
+          child: Text(
+            'لا توجد قضايا مطابقة للتصفية المحددة',
+            style: TextStyle(color: Colors.black54),
+          ),
+        ),
+      );
+    }
+
+    if (AppBreakpoints.isMobile(context)) {
+      return ListView.separated(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        itemCount: rows.length,
+        separatorBuilder: (context, index) => const SizedBox(height: 8),
+        itemBuilder: (_, i) => _DashboardFinanceCaseCard(
+          row: rows[i],
+          onOpenClient: () => _openClientFinance(rows[i]),
+          onOpenCase: () => _openCaseFromFinance(rows[i]),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Card(
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: MediaQuery.sizeOf(context).width - 48,
+            ),
+            child: DataTable(
+              showCheckboxColumn: false,
+              columnSpacing: 22,
+              dataRowMaxHeight: 64,
+              columns: const [
+                DataColumn(label: Text('الموكّل')),
+                DataColumn(label: Text('رقم القضية')),
+                DataColumn(label: Text('العنوان')),
+                DataColumn(label: Text('الحالة')),
+                DataColumn(label: Text('الأتعاب'), numeric: true),
+                DataColumn(label: Text('المسدد'), numeric: true),
+                DataColumn(label: Text('المتبقي'), numeric: true),
+                DataColumn(label: Text('إجراءات')),
+              ],
+              rows: rows.map((r) => _dashboardTableRow(r)).toList(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  DataRow _dashboardTableRow(Map<String, dynamic> r) {
+    final fees = (r['fees'] as num?)?.toDouble() ?? 0;
+    final paid = (r['paid'] as num?)?.toDouble() ?? 0;
+    final outstanding = (fees - paid).clamp(0, double.infinity);
+    final clientName = (r['client_name'] ?? '') as String;
+
+    return DataRow(
+      onSelectChanged: (_) => _openClientFinance(r),
+      cells: [
+        DataCell(
+          Text(
+            clientName,
+            style: const TextStyle(
+              decoration: TextDecoration.underline,
+              color: AppColors.navy,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          onTap: () => _openClientFinance(r),
+        ),
+        DataCell(
+          Text(
+            (r['case_number'] ?? '') as String,
+            style: const TextStyle(
+              color: AppColors.navy,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          onTap: () => _openCaseFromFinance(r),
+        ),
+        DataCell(
+          SizedBox(
+            width: 220,
+            child: Text(
+              (r['title'] ?? '') as String,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          onTap: () => _openCaseFromFinance(r),
+        ),
+        DataCell(StatusChip((r['status'] ?? '') as String)),
+        DataCell(Text(formatMoney(fees))),
+        DataCell(
+          Text(
+            formatMoney(paid),
+            style: const TextStyle(color: AppColors.success),
+          ),
+        ),
+        DataCell(
+          Text(
+            formatMoney(outstanding.toDouble()),
+            style: TextStyle(
+              color: outstanding > 0 ? AppColors.danger : AppColors.success,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        DataCell(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: 'تفاصيل القضية',
+                icon: const Icon(Icons.gavel_rounded, color: AppColors.navy),
+                onPressed: () => _openCaseFromFinance(r),
+              ),
+              IconButton(
+                tooltip: 'كشف حساب الموكّل',
+                icon: const Icon(
+                  Icons.account_balance_wallet_rounded,
+                  color: AppColors.gold,
+                ),
+                onPressed: () => _openClientFinance(r),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _openClientFinance(Map<String, dynamic> r) async {
+    final clientId = (r['client_id'] ?? 0) as int;
+    if (clientId == 0) return;
+    _go(AppShellTab.finance);
+  }
+
+  Future<void> _openCaseFromFinance(Map<String, dynamic> r) async {
+    final caseId = (r['id'] ?? 0) as int;
+    if (caseId == 0) return;
+    await _openCase(caseId);
   }
 
   Widget _upcomingList(_DashboardData d) {
@@ -203,8 +464,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Card(
           margin: EdgeInsets.zero,
           child: ListTile(
-            leading: const Icon(Icons.event_available_rounded,
-                color: AppColors.gold),
+            leading: const Icon(
+              Icons.event_available_rounded,
+              color: AppColors.gold,
+            ),
             title: const Text('لا توجد جلسات قادمة'),
             subtitle: const Text('فتح الأجندة لإضافة أو متابعة الجلسات.'),
             trailing: const Icon(Icons.chevron_left_rounded),
@@ -220,7 +483,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: d.upcoming.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
+          separatorBuilder: (context, index) => const Divider(height: 1),
           itemBuilder: (_, i) {
             final r = d.upcoming[i];
             final caseId = (r['case_id'] ?? 0) as int;
@@ -245,8 +508,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   StatusChip((r['status'] ?? '') as String),
                   const SizedBox(width: 4),
-                  const Icon(Icons.chevron_left_rounded,
-                      color: Colors.black38),
+                  const Icon(Icons.chevron_left_rounded, color: Colors.black38),
                 ],
               ),
             );
@@ -261,11 +523,43 @@ class _DashboardData {
   final Map<String, double> totals;
   final Map<String, int> counters;
   final List<Map<String, dynamic>> upcoming;
+  final List<LegalCase> allCases;
+  final List<Map<String, dynamic>> caseFinanceRows;
   _DashboardData({
     required this.totals,
     required this.counters,
     required this.upcoming,
+    required this.allCases,
+    required this.caseFinanceRows,
   });
+}
+
+enum _DashboardCaseFilter {
+  open('الوضع المالي لكل قضية'),
+  civil('الوضع المالي (مدني)'),
+  criminal('الوضع المالي (جنائي)'),
+  family('الوضع المالي (أحوال شخصية)');
+
+  const _DashboardCaseFilter(this.title);
+  final String title;
+
+  List<Map<String, dynamic>> filterRows(List<Map<String, dynamic>> rows) {
+    return rows.where((row) {
+      final status = (row['status'] ?? '') as String;
+      final rawType = row['case_type'];
+      final caseType = rawType is String ? rawType : '';
+      switch (this) {
+        case _DashboardCaseFilter.open:
+          return status == LegalCase.statusOpen;
+        case _DashboardCaseFilter.civil:
+          return caseType == CaseType.civil.name;
+        case _DashboardCaseFilter.criminal:
+          return caseType == CaseType.criminal.name;
+        case _DashboardCaseFilter.family:
+          return caseType == CaseType.family.name;
+      }
+    }).toList();
+  }
 }
 
 class _StatCard extends StatelessWidget {
@@ -326,11 +620,228 @@ class _StatCard extends StatelessWidget {
                 ),
               ),
               if (onTap != null)
-                const Icon(Icons.chevron_left_rounded,
-                    color: Colors.black38),
+                const Icon(Icons.chevron_left_rounded, color: Colors.black38),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _CaseCategoryCard extends StatelessWidget {
+  final String title;
+  final int total;
+  final int active;
+  final Color accentColor;
+  final VoidCallback? onTap;
+
+  const _CaseCategoryCard({
+    required this.title,
+    required this.total,
+    required this.active,
+    required this.accentColor,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: accentColor,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _MetricCell(
+                      label: 'إجمالي القضايا',
+                      value: '$total',
+                    ),
+                  ),
+                  Container(width: 1, height: 40, color: AppColors.divider),
+                  Expanded(
+                    child: _MetricCell(
+                      label: 'القضايا المفتوحة',
+                      value: '$active',
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MetricCell extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _MetricCell({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: AppColors.navy,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12, color: Colors.black54),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DashboardFinanceCaseCard extends StatelessWidget {
+  final Map<String, dynamic> row;
+  final VoidCallback onOpenClient;
+  final VoidCallback onOpenCase;
+
+  const _DashboardFinanceCaseCard({
+    required this.row,
+    required this.onOpenClient,
+    required this.onOpenCase,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fees = (row['fees'] as num?)?.toDouble() ?? 0;
+    final paid = (row['paid'] as num?)?.toDouble() ?? 0;
+    final outstanding = (fees - paid).clamp(0, double.infinity);
+    final clientName = (row['client_name'] ?? '') as String;
+    final caseNumber = (row['case_number'] ?? '') as String;
+    final title = (row['title'] ?? '') as String;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        onTap: onOpenClient,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      clientName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.navy,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                  StatusChip((row['status'] ?? '') as String),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '$caseNumber • $title',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.black87),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(child: _amountChip('الأتعاب', fees, AppColors.navy)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _amountChip('المسدد', paid, AppColors.success),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _amountChip(
+                      'المتبقي',
+                      outstanding.toDouble(),
+                      outstanding > 0 ? AppColors.danger : AppColors.success,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    onPressed: onOpenCase,
+                    icon: const Icon(Icons.gavel_rounded, size: 20),
+                    label: const Text('القضية'),
+                  ),
+                  TextButton.icon(
+                    onPressed: onOpenClient,
+                    icon: const Icon(
+                      Icons.account_balance_wallet_rounded,
+                      size: 20,
+                    ),
+                    label: const Text('كشف الحساب'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _amountChip(String label, double value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, color: Colors.black54),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            formatMoney(value),
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              color: color,
+              fontSize: 13,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -368,13 +879,17 @@ class _MiniTile extends StatelessWidget {
               Icon(icon, color: AppColors.gold),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(label,
-                    style: const TextStyle(
-                        fontSize: 12, color: Colors.black54)),
+                child: Text(
+                  label,
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                ),
               ),
               if (onTap != null)
-                const Icon(Icons.chevron_left_rounded,
-                    color: Colors.black38, size: 18),
+                const Icon(
+                  Icons.chevron_left_rounded,
+                  color: Colors.black38,
+                  size: 18,
+                ),
             ],
           ),
           const SizedBox(height: 6),

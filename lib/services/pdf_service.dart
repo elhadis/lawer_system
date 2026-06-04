@@ -15,6 +15,7 @@ import '../models/contract.dart';
 import '../models/legal_case.dart';
 import '../models/office_settings.dart';
 import '../models/payment.dart';
+
 /// Reusable PDF engine. Produces A4 documents with:
 ///   - Branded header (lawyer name + office name + logo placeholder)
 ///   - Professional border
@@ -95,16 +96,62 @@ class PdfService {
           if (contract.amount > 0)
             pw.Text(
               'قيمة العقد: ${_formatMoney(contract.amount)}',
-              style: pw.TextStyle(
-                fontSize: 13,
-                fontWeight: pw.FontWeight.bold,
-              ),
+              style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold),
             ),
           pw.SizedBox(height: 40),
           _buildSignatures(settings, client),
         ],
       ),
     );
+    return doc.save();
+  }
+
+  Future<Uint8List> buildCertificationPdf({
+    required String title,
+    required String body,
+  }) async {
+    final theme = await _theme();
+    final doc = pw.Document(theme: theme, title: title);
+
+    final paragraphs = body
+        .split(RegExp(r'\n\s*\n'))
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toList();
+
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.fromLTRB(36, 36, 36, 48),
+        textDirection: pw.TextDirection.rtl,
+        theme: theme,
+        footer: (ctx) => _buildFooter(ctx),
+        build: (ctx) => [
+          pw.SizedBox(height: 6),
+          pw.Text(
+            title,
+            style: pw.TextStyle(
+              fontSize: 16,
+              fontWeight: pw.FontWeight.bold,
+              color: const PdfColor.fromInt(0xFF001F3F),
+            ),
+            textAlign: pw.TextAlign.center,
+          ),
+          pw.SizedBox(height: 14),
+          ...paragraphs.map(
+            (para) => pw.Padding(
+              padding: const pw.EdgeInsets.only(bottom: 8),
+              child: pw.Text(
+                para,
+                style: const pw.TextStyle(fontSize: 12, lineSpacing: 4),
+                textAlign: pw.TextAlign.justify,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
     return doc.save();
   }
 
@@ -202,7 +249,10 @@ class PdfService {
     required List<Payment> payments,
   }) async {
     final theme = await _theme();
-    final doc = pw.Document(theme: theme, title: 'كشف حساب - ${client.fullName}');
+    final doc = pw.Document(
+      theme: theme,
+      title: 'كشف حساب - ${client.fullName}',
+    );
     final logoImage = await _loadLogo(settings.logoPath);
 
     final totalFees = cases.fold<double>(0, (s, c) => s + c.fees);
@@ -248,16 +298,25 @@ class PdfService {
           ),
           pw.SizedBox(height: 4),
           pw.TableHelper.fromTextArray(
-            headers: ['رقم القضية', 'العنوان', 'الأتعاب', 'المسدد', 'المتبقي', 'الحالة'],
+            headers: [
+              'رقم القضية',
+              'العنوان',
+              'الأتعاب',
+              'المسدد',
+              'المتبقي',
+              'الحالة',
+            ],
             data: cases
-                .map((c) => [
-                      c.caseNumber,
-                      c.title,
-                      _formatMoney(c.fees),
-                      _formatMoney(c.paid),
-                      _formatMoney(c.outstanding),
-                      c.status,
-                    ])
+                .map(
+                  (c) => [
+                    c.caseNumber,
+                    c.title,
+                    _formatMoney(c.fees),
+                    _formatMoney(c.paid),
+                    _formatMoney(c.outstanding),
+                    c.status,
+                  ],
+                )
                 .toList(),
             headerDecoration: const pw.BoxDecoration(
               color: PdfColor.fromInt(0xFF001F3F),
@@ -283,12 +342,14 @@ class PdfService {
           pw.TableHelper.fromTextArray(
             headers: ['التاريخ', 'المبلغ', 'الطريقة', 'ملاحظات'],
             data: payments
-                .map((p) => [
-                      _formatDate(p.paymentDate),
-                      _formatMoney(p.amount),
-                      p.method ?? '-',
-                      p.notes ?? '-',
-                    ])
+                .map(
+                  (p) => [
+                    _formatDate(p.paymentDate),
+                    _formatMoney(p.amount),
+                    p.method ?? '-',
+                    p.notes ?? '-',
+                  ],
+                )
                 .toList(),
             headerDecoration: const pw.BoxDecoration(
               color: PdfColor.fromInt(0xFF001F3F),
@@ -343,13 +404,15 @@ class PdfService {
           pw.TableHelper.fromTextArray(
             headers: ['التاريخ', 'العميل', 'القضية', 'المحكمة', 'الحالة'],
             data: agenda
-                .map((r) => [
-                      _formatDate((r['session_date'] ?? '') as String),
-                      (r['client_name'] ?? '') as String,
-                      '${r['case_number']} - ${r['case_title']}',
-                      (r['court_name'] ?? '-') as String,
-                      (r['status'] ?? '') as String,
-                    ])
+                .map(
+                  (r) => [
+                    _formatDate((r['session_date'] ?? '') as String),
+                    (r['client_name'] ?? '') as String,
+                    '${r['case_number']} - ${r['case_title']}',
+                    (r['court_name'] ?? '-') as String,
+                    (r['status'] ?? '') as String,
+                  ],
+                )
                 .toList(),
             headerDecoration: const pw.BoxDecoration(
               color: PdfColor.fromInt(0xFF001F3F),
@@ -388,8 +451,7 @@ class PdfService {
     String? jobName,
     String? shareText,
   }) async {
-    final useShareSheet = !kIsWeb &&
-        (Platform.isAndroid || Platform.isIOS);
+    final useShareSheet = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
     if (useShareSheet) {
       await _shareViaSharePlus(
         bytes,
@@ -501,7 +563,8 @@ class PdfService {
                   pw.Text(
                     [
                       if ((settings.address ?? '').isNotEmpty) settings.address,
-                      if ((settings.phone ?? '').isNotEmpty) 'هاتف: ${settings.phone}',
+                      if ((settings.phone ?? '').isNotEmpty)
+                        'هاتف: ${settings.phone}',
                     ].whereType<String>().join('  •  '),
                     style: const pw.TextStyle(fontSize: 9),
                   ),
@@ -514,15 +577,15 @@ class PdfService {
   }
 
   pw.Widget _buildFooter(pw.Context ctx) {
-    final printedAt = intl.DateFormat('yyyy/MM/dd HH:mm', 'ar').format(DateTime.now());
+    final printedAt = intl.DateFormat(
+      'yyyy/MM/dd HH:mm',
+      'ar',
+    ).format(DateTime.now());
     return pw.Container(
       padding: const pw.EdgeInsets.only(top: 6),
       decoration: const pw.BoxDecoration(
         border: pw.Border(
-          top: pw.BorderSide(
-            color: PdfColor.fromInt(0xFFD4AF37),
-            width: 0.8,
-          ),
+          top: pw.BorderSide(color: PdfColor.fromInt(0xFFD4AF37), width: 0.8),
         ),
       ),
       child: pw.Row(
@@ -560,7 +623,8 @@ class PdfService {
     final widgets = <pw.Widget>[];
     for (var i = 0; i < paragraphs.length; i++) {
       final para = paragraphs[i];
-      final isHeading = para.startsWith('البند') ||
+      final isHeading =
+          para.startsWith('البند') ||
           para.startsWith('تمهيد') ||
           para.startsWith('إنه في');
 
@@ -569,10 +633,7 @@ class PdfService {
           padding: const pw.EdgeInsets.symmetric(vertical: 4),
           child: pw.Container(
             width: double.infinity,
-            padding: const pw.EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 8,
-            ),
+            padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: pw.BoxDecoration(
               color: isHeading
                   ? const PdfColor.fromInt(0xFFF1E9D2)
@@ -589,8 +650,9 @@ class PdfService {
               style: pw.TextStyle(
                 fontSize: 12,
                 lineSpacing: 4,
-                fontWeight:
-                    isHeading ? pw.FontWeight.bold : pw.FontWeight.normal,
+                fontWeight: isHeading
+                    ? pw.FontWeight.bold
+                    : pw.FontWeight.normal,
                 color: isHeading
                     ? const PdfColor.fromInt(0xFF001F3F)
                     : const PdfColor.fromInt(0xFF1A1A1A),
@@ -626,7 +688,8 @@ class PdfService {
           if ((client.nationalId ?? '').isNotEmpty)
             _kvRow('رقم الهوية', client.nationalId!),
           if ((client.phone ?? '').isNotEmpty) _kvRow('الهاتف', client.phone!),
-          if ((client.address ?? '').isNotEmpty) _kvRow('العنوان', client.address!),
+          if ((client.address ?? '').isNotEmpty)
+            _kvRow('العنوان', client.address!),
         ],
       ),
     );
@@ -663,7 +726,10 @@ class PdfService {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       children: [
-        _signature('الطرف الأول (الموكّل)', client?.fullName ?? '________________'),
+        _signature(
+          'الطرف الأول (الموكّل)',
+          client?.fullName ?? '________________',
+        ),
         _signature('الطرف الثاني (المحامي)', settings.lawyerName),
       ],
     );
@@ -675,9 +741,10 @@ class PdfService {
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
-          pw.Text(label,
-              style: pw.TextStyle(
-                  fontWeight: pw.FontWeight.bold, fontSize: 11)),
+          pw.Text(
+            label,
+            style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
+          ),
           pw.SizedBox(height: 36),
           pw.Container(
             width: 200,
@@ -706,52 +773,69 @@ class PdfService {
           ),
           child: pw.Column(
             children: [
-              pw.Text(label,
-                  style: pw.TextStyle(
-                    color: PdfColors.white,
-                    fontWeight: pw.FontWeight.bold,
-                    fontSize: 11,
-                  )),
+              pw.Text(
+                label,
+                style: pw.TextStyle(
+                  color: PdfColors.white,
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 11,
+                ),
+              ),
               pw.SizedBox(height: 4),
-              pw.Text(_formatMoney(value),
-                  style: pw.TextStyle(
-                    color: PdfColors.white,
-                    fontWeight: pw.FontWeight.bold,
-                    fontSize: 13,
-                  )),
+              pw.Text(
+                _formatMoney(value),
+                style: pw.TextStyle(
+                  color: PdfColors.white,
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
             ],
           ),
         ),
       );
     }
 
-    return pw.Row(children: [
-      box('إجمالي الأتعاب', totals['fees'] ?? 0,
-          const PdfColor.fromInt(0xFF001F3F)),
-      box('إجمالي المسدد', totals['paid'] ?? 0,
-          const PdfColor.fromInt(0xFF1B5E20)),
-      box('إجمالي المتبقي', totals['outstanding'] ?? 0,
-          const PdfColor.fromInt(0xFFB71C1C)),
-    ]);
+    return pw.Row(
+      children: [
+        box(
+          'إجمالي الأتعاب',
+          totals['fees'] ?? 0,
+          const PdfColor.fromInt(0xFF001F3F),
+        ),
+        box(
+          'إجمالي المسدد',
+          totals['paid'] ?? 0,
+          const PdfColor.fromInt(0xFF1B5E20),
+        ),
+        box(
+          'إجمالي المتبقي',
+          totals['outstanding'] ?? 0,
+          const PdfColor.fromInt(0xFFB71C1C),
+        ),
+      ],
+    );
   }
 
   pw.Widget _kvRow(String k, String v) => pw.Padding(
-        padding: const pw.EdgeInsets.symmetric(vertical: 2),
-        child: pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Container(
-              width: 90,
-              child: pw.Text('$k:',
-                  style: pw.TextStyle(
-                    fontWeight: pw.FontWeight.bold,
-                    color: const PdfColor.fromInt(0xFF001F3F),
-                  )),
+    padding: const pw.EdgeInsets.symmetric(vertical: 2),
+    child: pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Container(
+          width: 90,
+          child: pw.Text(
+            '$k:',
+            style: pw.TextStyle(
+              fontWeight: pw.FontWeight.bold,
+              color: const PdfColor.fromInt(0xFF001F3F),
             ),
-            pw.Expanded(child: pw.Text(v)),
-          ],
+          ),
         ),
-      );
+        pw.Expanded(child: pw.Text(v)),
+      ],
+    ),
+  );
 
   String _formatDate(String iso) {
     try {

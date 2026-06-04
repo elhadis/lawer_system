@@ -23,13 +23,13 @@ class _CaseFormScreenState extends State<CaseFormScreen> {
   late final TextEditingController _number;
   late final TextEditingController _title;
   late final TextEditingController _court;
-  late final TextEditingController _type;
   late final TextEditingController _opponent;
   late final TextEditingController _fees;
   late final TextEditingController _notes;
 
   int? _clientId;
   String _status = LegalCase.statusOpen;
+  CaseType? _selectedCaseType;
   DateTime? _nextSession;
 
   List<Client> _clients = [];
@@ -42,7 +42,7 @@ class _CaseFormScreenState extends State<CaseFormScreen> {
     _number = TextEditingController(text: c?.caseNumber ?? '');
     _title = TextEditingController(text: c?.title ?? '');
     _court = TextEditingController(text: c?.courtName ?? '');
-    _type = TextEditingController(text: c?.caseType ?? '');
+    _selectedCaseType = c?.caseType;
     _opponent = TextEditingController(text: c?.opponent ?? '');
     _fees = TextEditingController(text: c == null ? '' : c.fees.toString());
     _notes = TextEditingController(text: c?.notes ?? '');
@@ -65,7 +65,6 @@ class _CaseFormScreenState extends State<CaseFormScreen> {
     _number.dispose();
     _title.dispose();
     _court.dispose();
-    _type.dispose();
     _opponent.dispose();
     _fees.dispose();
     _notes.dispose();
@@ -86,9 +85,9 @@ class _CaseFormScreenState extends State<CaseFormScreen> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_clientId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('يرجى اختيار الموكّل.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('يرجى اختيار الموكّل.')));
       return;
     }
     setState(() => _saving = true);
@@ -100,7 +99,7 @@ class _CaseFormScreenState extends State<CaseFormScreen> {
         caseNumber: _number.text.trim(),
         title: _title.text.trim(),
         courtName: _court.text.trim().isEmpty ? null : _court.text.trim(),
-        caseType: _type.text.trim().isEmpty ? null : _type.text.trim(),
+        caseType: _selectedCaseType,
         opponent: _opponent.text.trim().isEmpty ? null : _opponent.text.trim(),
         status: _status,
         fees: fees,
@@ -133,14 +132,17 @@ class _CaseFormScreenState extends State<CaseFormScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               DropdownButtonFormField<int>(
-                initialValue:
-                    _clients.any((c) => c.id == _clientId) ? _clientId : null,
+                initialValue: _clients.any((c) => c.id == _clientId)
+                    ? _clientId
+                    : null,
                 decoration: const InputDecoration(labelText: 'الموكّل *'),
                 items: _clients
-                    .map((c) => DropdownMenuItem(
-                          value: c.id,
-                          child: Text(c.fullName),
-                        ))
+                    .map(
+                      (c) => DropdownMenuItem(
+                        value: c.id,
+                        child: Text(c.fullName),
+                      ),
+                    )
                     .toList(),
                 onChanged: (v) => setState(() => _clientId = v),
                 validator: (v) => v == null ? 'اختر الموكّل' : null,
@@ -152,7 +154,8 @@ class _CaseFormScreenState extends State<CaseFormScreen> {
                     child: TextFormField(
                       controller: _number,
                       decoration: const InputDecoration(
-                          labelText: 'رقم القضية *'),
+                        labelText: 'رقم القضية *',
+                      ),
                       validator: (v) => (v == null || v.trim().isEmpty)
                           ? 'رقم القضية مطلوب'
                           : null,
@@ -160,9 +163,23 @@ class _CaseFormScreenState extends State<CaseFormScreen> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: TextFormField(
-                      controller: _type,
-                      decoration: const InputDecoration(labelText: 'نوع القضية'),
+                    child: DropdownButtonFormField<CaseType>(
+                      initialValue: _selectedCaseType,
+                      decoration: const InputDecoration(
+                        labelText: 'نوع القضية *',
+                      ),
+                      items: CaseType.values
+                          .map(
+                            (type) => DropdownMenuItem<CaseType>(
+                              value: type,
+                              child: Text(type.nameAr),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) =>
+                          setState(() => _selectedCaseType = value),
+                      validator: (value) =>
+                          value == null ? 'اختر نوع القضية' : null,
                     ),
                   ),
                 ],
@@ -171,9 +188,8 @@ class _CaseFormScreenState extends State<CaseFormScreen> {
               TextFormField(
                 controller: _title,
                 decoration: const InputDecoration(labelText: 'عنوان القضية *'),
-                validator: (v) => (v == null || v.trim().isEmpty)
-                    ? 'العنوان مطلوب'
-                    : null,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'العنوان مطلوب' : null,
               ),
               const SizedBox(height: 12),
               Row(
@@ -188,8 +204,9 @@ class _CaseFormScreenState extends State<CaseFormScreen> {
                   Expanded(
                     child: TextFormField(
                       controller: _opponent,
-                      decoration:
-                          const InputDecoration(labelText: 'الخصم / الطرف الآخر'),
+                      decoration: const InputDecoration(
+                        labelText: 'الخصم / الطرف الآخر',
+                      ),
                     ),
                   ),
                 ],
@@ -200,17 +217,21 @@ class _CaseFormScreenState extends State<CaseFormScreen> {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       initialValue: _status,
-                      decoration:
-                          const InputDecoration(labelText: 'حالة القضية'),
-                      items: const [
-                        LegalCase.statusOpen,
-                        LegalCase.statusInProgress,
-                        LegalCase.statusJudged,
-                        LegalCase.statusClosed,
-                      ]
-                          .map((s) =>
-                              DropdownMenuItem(value: s, child: Text(s)))
-                          .toList(),
+                      decoration: const InputDecoration(
+                        labelText: 'حالة القضية',
+                      ),
+                      items:
+                          const [
+                                LegalCase.statusOpen,
+                                LegalCase.statusInProgress,
+                                LegalCase.statusJudged,
+                                LegalCase.statusClosed,
+                              ]
+                              .map(
+                                (s) =>
+                                    DropdownMenuItem(value: s, child: Text(s)),
+                              )
+                              .toList(),
                       onChanged: (v) =>
                           setState(() => _status = v ?? LegalCase.statusOpen),
                     ),
@@ -219,10 +240,12 @@ class _CaseFormScreenState extends State<CaseFormScreen> {
                   Expanded(
                     child: TextFormField(
                       controller: _fees,
-                      decoration:
-                          const InputDecoration(labelText: 'أتعاب المحاماة'),
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'أتعاب المحاماة',
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                     ),
                   ),
                 ],
@@ -234,8 +257,10 @@ class _CaseFormScreenState extends State<CaseFormScreen> {
                 child: InputDecorator(
                   decoration: const InputDecoration(
                     labelText: 'الجلسة القادمة',
-                    suffixIcon: Icon(Icons.calendar_today_rounded,
-                        color: AppColors.navy),
+                    suffixIcon: Icon(
+                      Icons.calendar_today_rounded,
+                      color: AppColors.navy,
+                    ),
                   ),
                   child: Text(
                     _nextSession == null

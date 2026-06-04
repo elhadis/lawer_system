@@ -21,7 +21,7 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
 
   static const _dbName = 'lawer_system.db';
-  static const _dbVersion = 1;
+  static const _dbVersion = 2;
   Database? _db;
 
   /// Initialise the desktop FFI loader on Windows / Linux / macOS so the
@@ -67,6 +67,7 @@ class DatabaseHelper {
       version: _dbVersion,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -126,6 +127,7 @@ class DatabaseHelper {
         amount REAL NOT NULL DEFAULT 0,
         contract_date TEXT NOT NULL,
         created_at TEXT NOT NULL,
+        is_certification INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
         FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE SET NULL
       );
@@ -172,6 +174,14 @@ class DatabaseHelper {
     ''');
 
     await db.insert('office_settings', const OfficeSettings().toMap());
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute(
+        'ALTER TABLE contracts ADD COLUMN is_certification INTEGER NOT NULL DEFAULT 0',
+      );
+    }
   }
 
   // ─────────────────────────────────────────── Clients ───────────────
@@ -289,7 +299,9 @@ class DatabaseHelper {
       args.add(clientId);
     }
     if (search != null && search.isNotEmpty) {
-      whereParts.add('(case_number LIKE ? OR title LIKE ? OR court_name LIKE ?)');
+      whereParts.add(
+        '(case_number LIKE ? OR title LIKE ? OR court_name LIKE ?)',
+      );
       args.addAll(['%$search%', '%$search%', '%$search%']);
     }
     final rows = await db.query(
@@ -380,7 +392,12 @@ class DatabaseHelper {
 
   Future<int> updateContract(Contract c) async {
     final db = await database;
-    return db.update('contracts', c.toMap(), where: 'id = ?', whereArgs: [c.id]);
+    return db.update(
+      'contracts',
+      c.toMap(),
+      where: 'id = ?',
+      whereArgs: [c.id],
+    );
   }
 
   Future<int> deleteContract(int id) async {
@@ -407,10 +424,10 @@ class DatabaseHelper {
     final db = await database;
     return db.transaction((txn) async {
       final id = await txn.insert('payments', p.toMap()..remove('id'));
-      await txn.rawUpdate(
-        'UPDATE cases SET paid = paid + ? WHERE id = ?',
-        [p.amount, p.caseId],
-      );
+      await txn.rawUpdate('UPDATE cases SET paid = paid + ? WHERE id = ?', [
+        p.amount,
+        p.caseId,
+      ]);
       return id;
     });
   }
@@ -418,8 +435,11 @@ class DatabaseHelper {
   Future<int> deletePayment(Payment p) async {
     final db = await database;
     return db.transaction((txn) async {
-      final affected =
-          await txn.delete('payments', where: 'id = ?', whereArgs: [p.id]);
+      final affected = await txn.delete(
+        'payments',
+        where: 'id = ?',
+        whereArgs: [p.id],
+      );
       await txn.rawUpdate(
         'UPDATE cases SET paid = MAX(0, paid - ?) WHERE id = ?',
         [p.amount, p.caseId],
@@ -431,13 +451,16 @@ class DatabaseHelper {
   Future<List<Payment>> getPayments({int? caseId, int? clientId}) async {
     final db = await database;
     if (clientId != null) {
-      final rows = await db.rawQuery('''
+      final rows = await db.rawQuery(
+        '''
         SELECT payments.*
         FROM payments
         INNER JOIN cases ON cases.id = payments.case_id
         WHERE cases.client_id = ?
         ORDER BY payments.payment_date DESC
-      ''', [clientId]);
+      ''',
+        [clientId],
+      );
       return rows.map(Payment.fromMap).toList();
     }
     final rows = await db.query(
@@ -523,24 +546,38 @@ class DatabaseHelper {
 
   Future<Map<String, int>> getCounters() async {
     final db = await database;
-    final clients = Sqflite.firstIntValue(
-            await db.rawQuery('SELECT COUNT(*) FROM clients')) ??
+    final clients =
+        Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM clients'),
+        ) ??
         0;
     final cases =
-        Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM cases')) ??
-            0;
-    final openCases = Sqflite.firstIntValue(await db.rawQuery(
-          "SELECT COUNT(*) FROM cases WHERE status != ?",
-          [LegalCase.statusClosed],
-        )) ??
+        Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM cases'),
+        ) ??
         0;
-    final upcoming = Sqflite.firstIntValue(await db.rawQuery('''
+    final openCases =
+        Sqflite.firstIntValue(
+          await db.rawQuery("SELECT COUNT(*) FROM cases WHERE status != ?", [
+            LegalCase.statusClosed,
+          ]),
+        ) ??
+        0;
+    final upcoming =
+        Sqflite.firstIntValue(
+          await db.rawQuery(
+            '''
       SELECT COUNT(*) FROM sessions
       WHERE status = ? AND session_date >= ?
-    ''', [CaseSession.statusPending, DateTime.now().toIso8601String()])) ??
+    ''',
+            [CaseSession.statusPending, DateTime.now().toIso8601String()],
+          ),
+        ) ??
         0;
-    final contracts = Sqflite.firstIntValue(
-            await db.rawQuery('SELECT COUNT(*) FROM contracts')) ??
+    final contracts =
+        Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM contracts'),
+        ) ??
         0;
     return {
       'clients': clients,
